@@ -18,6 +18,8 @@ Created on Thu Feb 11 20:09:07 2021
 
 # Tu run experiment #4, please exclude parameter must be different of 0, and specify subject unknown
 
+
+
 import eegTrain
 import eegEvaluate
 
@@ -29,7 +31,7 @@ eegTrain.weightsDirectory = '../Weights/'
 
 
 # Experiment #1
-#eegTrain.trainKFold('B01',dropoutRate=0.5, cropDistance = 2, cropSize = 1000)
+eegTrain.trainKFold('B01',dropoutRate=0.5, cropDistance = 2, cropSize = 1000)
 
 # Experiment #2
 # eegTrain.intraSubjectTrain('B01', 19,
