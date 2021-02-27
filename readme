@@ -1,0 +1,9 @@
+# Deterministic-CNN
+
+Shallow Convolutional Network evaluated on database 2a and database 2b BCI Competition IV, 2008
+Data contains the preprocessed databases in format .mat
+Preprocessing:
+Band-pass filter from 4-38 Hz.
+Exponential moving standardization with a decay factor of 0.999, to compute μ(ti) mean and variance σ^2(ti) in each trial.
+The data x was normalized by (x-μ(ti))/σ(ti)
+Rectify outliers, limited to μ(ti) ± 6σ(ti)
