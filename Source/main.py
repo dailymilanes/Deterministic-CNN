@@ -25,7 +25,7 @@ global dataDirectory
 eegTrain.dataDirectory = '../Data/'    
 
 global weightsDirectory 
-eegTrain.weightsDirectory = '../Weights'
+eegTrain.weightsDirectory = '../Weights/'
 
 
 # Experiment #1
@@ -48,6 +48,6 @@ eegTrain.weightsDirectory = '../Weights'
 # Evaluate function
 # Specified the weightsFileName
 #weightsFileName='../Weights/B01_Seed_19_R_1_d_0.50_c_2_x_0_weights.hdf5'
-#eegEvaluate.eegEvaluate('B01', cropDistance=125, cropSize=1000, weightsFileName=weightsFileName,
-                        dropoutRate = 0.5,channels = 3, nb_classes = 2)
+#eegEvaluate.eegEvaluate('B01', cropDistance=2, cropSize=1000, weightsFileName=weightsFileName,
+     #                   dropoutRate = 0.5,channels = 3, nb_classes = 2)
 
