@@ -55,13 +55,13 @@ def makeCrops(data, cropDistance, cropSize):
         for i in range(0, cropsCount):
              j = i*cropDistance
              y[0,:,:] = data[j:cropSize+j, :]
-             z.append(y)   
+             z.append(np.copy(y))   
     else:
         y = np.zeros((cropSize, channels, 1), dtype=np.float32)
         for i in range(0, cropsCount):
              j = i*cropDistance
              y[:,:,0] = data[j:cropSize+j, :]
-             z.append(y)   
+             z.append(np.copy(y))   
     return z
 
 
