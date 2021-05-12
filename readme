@@ -1,6 +1,6 @@
 # Deterministic-CNN
 
-Shallow Convolutional Network evaluated on database 2a and database 2b BCI Competition IV, 2008
+Shallow Convolutional Network evaluated on database 2a and database 2b from BCI Competition IV, 2008 and on dataset IVa from BCI Competition III
 Data contains the preprocessed databases in format .mat
 Preprocessing:
 Band-pass filter from 4-38 Hz.
