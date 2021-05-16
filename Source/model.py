@@ -24,7 +24,7 @@ def createModel(nb_classes = 4, Chans = 22, Samples = 1000, dropoutRate = 0.5, i
     input_main   = Input(my_shape) 
     block = Conv2D(40, (45, 1), strides = (2, 1), use_bias = False,
                     input_shape = my_shape, 
-                    kernel_constraint = max_norm(3.0, axis=(0,1,2)))(input_main) 
+                    kernel_constraint = max_norm(3.0, axis=(0,1,2)),name='TimeConv')(input_main) 
     block = Conv2D(40, (1, Chans), use_bias=False,  name='channelConv')(block)
     block = BatchNormalization(epsilon=1e-05, momentum=0.1)(block) 
     block = keras.layers.Activation(square)(block)
@@ -32,6 +32,6 @@ def createModel(nb_classes = 4, Chans = 22, Samples = 1000, dropoutRate = 0.5, i
     block  = keras.layers.Activation(log)(block) 
     block  = Dropout(dropoutRate)(block)
     flatten = Flatten()(block) 
-    dense   = Dense(nb_classes, kernel_constraint = max_norm(0.5))(flatten) 
+    dense   = Dense(nb_classes, kernel_constraint = max_norm(0.5),name='Dense')(flatten) 
     softmax = keras.layers.Activation('softmax')(dense)      
     return Model(inputs=input_main, outputs=softmax) 

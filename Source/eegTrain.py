@@ -13,7 +13,7 @@ import pandas as pd
 import eegUtils
 import model
 import scipy.io as sio
-from sklearn.model_selection import RepeatedKFold
+from sklearn.model_selection import StratifiedKFold, RepeatedStratifiedKFold
 
 
 # Global Variable that contains the path where the dataset is preprocessed
@@ -23,14 +23,14 @@ dataDirectory = ''
 weightsDirectory = ''
 
 # All functions to train the differents experiments.
-# repeat= Parameter that indicates the repetition of each experiment, 
+# n= Parameter that indicates the repetition of each experiment, 
          # in order to differentiate the files of each weights and results of each repetition in the training process.
 # We use Adam as optimizer, and loss=categorical crossentropy
 
 # This is a funcion to realize the training for experiments #2,#3 and #4
 # subject: subject identifier (intra-subject training, Experiment #2), if "All" correspond to Experiment #3 or #4
 # seed:Seed to initialize the python random number generator to ensure repeatability of the experiment. 
-#      For experiment 2 please, use the seed shows in main.py
+#      For experiments #2,#3 and #4 please, use the seed shows in main.py
 # Divide randomly each list left, right, foot, and tongue in two parts, one to train and other to validate the model
 # The portion selected to train and to validate depends of the dataset
 # If dataset 2a fraction=5/6, if dataset 2b fraction=4/5 
@@ -40,196 +40,293 @@ weightsDirectory = ''
 #exclude: If experiment 4, exclude different of 0, for the other experiments exclude must be 0.
 
  
-def oneSubjectTrain(left, right, foot, tongue, subject, seed, repeat, 
+def oneSubjectTrain(datalist,labelslist, subject, seed, repeat, 
               exclude = 0, cropDistance = 2, cropSize = 1000, dropoutRate = 0.5, 
               fraction = 5/6, channels = 22, nb_classes = 4):
-    
-    len1 = len(left)
-    len2 = len(foot)
-    random.seed(seed)
-    
-# Shuffle data
-    l = random.sample(left, len1)
-    r = random.sample(right, len1)
-    f = random.sample(foot, len2)
-    t = random.sample(tongue, len2)
-    
-    usedForTraining = int(round(fraction*len1))
-    	
-# trains_indices: List with number of trial to train according to partition realized
-# val_indices: List with number of trial to validate according to partition realized
-    
-    train_indices = range(usedForTraining)
-    val_indices = range(usedForTraining,len1,1)
-        
-# Create numpy arrays to train and to validate according to the partition realized
-    
-    train_data, train_labels = eegUtils.makeNumpys(l, r, f, t, cropDistance, cropSize, train_indices)
-    val_data, val_labels = eegUtils.makeNumpys(l, r, f, t, cropDistance, cropSize, val_indices)
-    
+              
+   
     droputStr = "%0.2f" % dropoutRate 
     
-    classifier = model.createModel(Samples = cropSize, dropoutRate=dropoutRate, 
-                                   Chans = channels, nb_classes = nb_classes)   
-    baseFileName = weightsDirectory + subject + '_Seed_' +str(seed) +'_R_'+ str(repeat)+ '_d_' + droputStr + '_c_'+str(cropDistance)+ '_x_'+str(exclude)
+    cv = StratifiedKFold(n_splits = fraction, random_state=seed)
+    pseudoTrialList = range(len(datalist))
+    pseudolabelList = np.array(labelslist)
+    
+    for train_indices, val_indices in cv.split(pseudoTrialList, pseudolabelList):
+        
+        baseFileName= weightsDirectory+subject+ '_d_' + droputStr + '_c_'+str(cropDistance)+'_seed'+str(seed)+'_exp_'+str(repeat)+'_exclude_'+str(exclude)
+        weightFileName=baseFileName +'_weights.hdf5'
+                    
+        classifier = model.createModel(Samples = cropSize, dropoutRate = dropoutRate,
+                                       nb_classes = nb_classes, Chans = channels)
+        classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+        callback1 = keras.callbacks.ModelCheckpoint(monitor='val_loss', filepath = weightFileName,
+                                                   save_best_only=True,
+                                                   save_weights_only=True)
+        callback2 = keras.callbacks.EarlyStopping(monitor='val_loss', patience=12)    
+        callback3 = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.33, patience=5, verbose=1, min_delta=1e-6) 
+        classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+        gen1 = eegUtils.Generator(datalist, labelslist, nb_classes, train_indices, channels, cropDistance, cropSize, int(math.ceil((1125-cropSize) / cropDistance)))
+        gen2 = eegUtils.Generator(datalist, labelslist, nb_classes, val_indices, channels, cropDistance, cropSize, int(math.ceil((1125-cropSize) / cropDistance)))
+        pasosxepocaT=int((len(train_indices)*int(math.ceil((1125-cropSize)/cropDistance)))/32)
+        pasosxepocaV= int((len(val_indices)*int(math.ceil((1125-cropSize)/cropDistance)))/32)
+        
+        history = classifier.fit(gen1, steps_per_epoch=pasosxepocaT, epochs = 100, verbose = 1, 
+                                       validation_data = gen2, validation_steps=pasosxepocaV, callbacks=[callback1, callback2, callback3])
+        
+        hist_df = pd.DataFrame(history.history) 
 
-# File name which the weights will be saved
-    weightFileName = baseFileName+'_weights.hdf5'
-# Establish the callbacks to training  
-
-    callback1 = keras.callbacks.ModelCheckpoint(monitor='val_loss', filepath = weightFileName,
-                                                save_best_only=True,
-                                                save_weights_only=True)
-    callback2 = keras.callbacks.EarlyStopping(monitor='val_loss', patience=12)    
-    callback3 = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.33, patience=5, verbose=1, min_delta=1e-6) 
-    classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
-    history = classifier.fit(train_data, train_labels, epochs = 200, verbose = 1, shuffle = True, 
-                             validation_data = (val_data, val_labels), 
-                             callbacks=[callback1, callback2, callback3])
-    hist_df=pd.DataFrame(history.history)
     
-# The training history will be saved in the same path that the weights
-    file=baseFileName+'.json'
-    with open(file,mode='w') as f:
-      hist_df.to_json(f)
-    f.close()
+        file=baseFileName+'.json'
+        with open(file,mode='w') as f:
+          hist_df.to_json(f)
+        f.close()
+        break
     
     
-# This function prepares a intra subject training for Experiment #2. The number of repetitions is 10 
+    
+# This function prepares a intra subject training for Experiment #2. The number of repetitions is now 16, each one with a different seed
    
-def intraSubjectTrain(subject, seed,
-          dropoutRate=0.5, cropDistance = 50, cropSize = 1000):
+def intraSubjectTrain(subject, dropoutRate=0.5, cropDistance = 50, cropSize = 1000):
+     
     
     if subject[0] == 'A':
-      channels=22
-      fraction=5/6
-      nb_classes=4
-    else:
-      channels=3
-      fraction=4/5
-      nb_classes=2
-    
+       channels=22
+       fraction=6
+       nb_classes=4
+       strLabels=['Left','Right', 'Foot', 'Tongue']
+    elif subject[0] == 'B':
+       channels=3
+       fraction=5
+       nb_classes=2
+       strLabels=['Left','Right']
+      
     trainDirectory = dataDirectory + subject + '/Training/'
-    left,right,foot,tongue = eegUtils.load_eeg(trainDirectory)    
-    for j in range(1,11):
-         oneSubjectTrain(left, right, foot, tongue, subject, seed, j,
+    datalist, labelslist = load_eeg(trainDirectory,strLabels)
+    
+    seed=1 
+    for j in range(1,17):
+       oneSubjectTrain(datalist, labelslist, subject, seed, j,
                    cropDistance = cropDistance, cropSize = cropSize, 
                    dropoutRate = dropoutRate, fraction = fraction, 
                    channels = channels, nb_classes = nb_classes)
+       seed=seed+1
 
 
-# This function prepares a inter-subject training for Experiments #3 and #4. The number of repetitions is 10 
+
+# This function prepares a inter-subject training for Experiments #3 and #4. The number of repetitions is 16 
 # If the experiment is #3 exclude=0, and all data training for all subjects are load
 # If experiment #4, exclude different of 0 and all data training and evaluating for all subjects except exclude subject are load
   
-def interSubjectTrain(seed, dropoutRate=0.5, cropDistance = 50, cropSize = 1000,
-                      fraction = 5/6, channels = 22, nb_classes = 4,
-                      exclude = 0):
-    if nb_classes==4:
-      data='A'
-      channels=22
-      fraction=5/6
-    else:
-      data='B'
-      channels=3
-      fraction=4/5
-    start = 1  
-    if exclude == 1:
+def interSubjectTrain(dropoutRate=0.5, cropDistance = 50, cropSize = 1000,
+                      nb_classes = 4,exclude = 0):
+      
+     if nb_classes==4:
+       data='A'
+       channels=22
+       fraction=6
+       strLabels=['Left','Right', 'Foot', 'Tongue']
+     elif nb_classes==2:
+       data='B'
+       channels=3
+       fraction=5
+       strLabels=['Left','Right']
+     start = 1  
+     if exclude == 1:
         start = 2
-    left,right,foot,tongue = eegUtils.load_eeg(dataDirectory + data+'0'+str(start)+'/Training/') 
-    if exclude!=0:
-        lTmp, rTmp, fTmp, tTmp = eegUtils.load_eeg(dataDirectory + data+ '0'+str(start)+'/Evaluating/')
-        left = left + lTmp
-        right = right + rTmp
-        foot = foot + fTmp
-        tongue = tongue + tTmp
         
-    print(start)
-    for i in range(start + 1, 10):
+     datalist, labelslist = eegUtils.load_eeg(dataDirectory + data+'0'+str(start)+'/Training/', strLabels )
+   
+     if exclude!=0:
+        datalistT, labelslistT = eegUtils.load_eeg(dataDirectory + data+'0'+str(start)+'/Evaluating/', strLabels)
+        datalist=datalist + datalistT
+        labelslist=labelslist + labelslistT  
+        
+     for i in range(start + 1, 10):
         if (i == exclude):
             continue
-        lTmp, rTmp, fTmp, tTmp = eegUtils.load_eeg(dataDirectory + data+ '0'+str(i)+'/Training/')
-        left = left + lTmp
-        right = right + rTmp
-        foot = foot + fTmp
-        tongue = tongue + tTmp
+        datalistT, labelslistT = eegUtils.load_eeg(dataDirectory + data+'0'+str(i)+'/Training/', strLabels)
+        datalist=datalist + datalistT
+        labelslist=labelslist + labelslistT 
         if exclude!=0:
-            lTmp, rTmp, fTmp, tTmp = eegUtils.load_eeg(dataDirectory + data+ '0'+str(i)+'/Evaluating/')
-            left = left + lTmp
-            right = right + rTmp
-            foot = foot + fTmp
-            tongue = tongue + tTmp
-        print(i)
-        print(len(left))
-    for j in range(1,11):
-        oneSubjectTrain(left, right, foot, tongue, 'All', seed, j,
+            datalistT, labelslistT = eegUtils.load_eeg(dataDirectory + data+'0'+str(i)+'/Evaluating/', strLabels)
+            datalist=datalist + datalistT
+            labelslist=labelslist + labelslistT 
+    
+     seed=1              
+     for j in range(1,17):
+        oneSubjectTrain(datalist, labelslist, 'All', seed, j, exclude=exclude,
                    cropDistance = cropDistance, cropSize = cropSize, 
                    dropoutRate = dropoutRate, fraction = fraction, 
-                   channels = channels, nb_classes = nb_classes, 
-                   exclude = exclude)
+                   channels = channels, nb_classes = nb_classes)
+        seed=seed+1
 
-# This function implemented a KFold with 10 repetitions, dataset2a is 9x10 and in dataset 2b is 10x10
-# The weights are not saved, only the history on training
+# This function implemented a KFold with 10 repetitions, dataset 2a and dataset IVa are 9x10 KFold and in dataset 2b is 10x10 Kfold
 
-def eegKFold(left, right, foot, tongue, folds, subject,
+def eegKFold(trialList, labelList, folds, subject,
              cropDistance = 2, cropSize = 1000, 
-             dropoutRate = 0.5, nb_classes = 4):
+             dropoutRate = 0.5, nb_classes = 4, channels=22):
+   
+
     result = []
     n=1
+    seed=5
     droputStr = "%0.2f" % dropoutRate 
-    cv = RepeatedKFold(n_splits = folds, n_repeats = 10)
-    for train_indices, test_indices in cv.split(range(len(left))):
-        train_data, train_labels = eegUtils.makeNumpys(left, right, foot, tongue, cropDistance, cropSize, train_indices)
-        val_data, val_labels = eegUtils.makeNumpys(left, right, foot, tongue, cropDistance, cropSize, test_indices)
-        Channels = 22
-        if (foot == []):
-            Channels = 3
-            nb_classes=2
-            
+    if subject[0]=='a':
+        len_trial=875
+    else:
+        len_trial=1000
+    cv = RepeatedStratifiedKFold(n_splits = folds, n_repeats = 10, random_state=seed)
+    pseudoTrialList = range(len(trialList))
+    pseudolabelList = np.array(labelList)
+    
+    for train_indices, test_indices in cv.split(pseudoTrialList, pseudolabelList):
         classifier = model.createModel(Samples = cropSize, dropoutRate = dropoutRate,
-                                      nb_classes = nb_classes, Chans = Channels)
-      
+                                      nb_classes = nb_classes, Chans = channels)
+        
+        baseFileName= weightsDirectory+subject+ '_KFold_d_' + droputStr + '_c_'+str(cropDistance)+'_seed'+str(seed)+'_exp_'+str(n)
+        weightFileName=baseFileName +'_weights.hdf5'
+        callback1 = keras.callbacks.ModelCheckpoint(monitor='val_loss', filepath = weightsDirectory,
+                                                   save_best_only=True,
+                                                   save_weights_only=True)
         callback2 = keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=12)    
         callback3 = keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.33, patience=5, verbose=1, min_delta=1e-6) 
         classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
-        history = classifier.fit(train_data, train_labels, epochs = 100, verbose = 1,
-                            validation_data = (val_data, val_labels) , callbacks=[callback2, callback3])
+        gen2 = Generator(trialList, labelList, nb_classes, test_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize)/cropDistance)))
+        gen1 = Generator(trialList, labelList, nb_classes, train_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize)/cropDistance)))
+        
+        pasosxepocaT=int((len(train_indices)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
+        pasosxepocaV= int((len(test_indices)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
+
+        history = classifier.fit_generator(gen1, steps_per_epoch=pasosxepocaT, epochs = 100, verbose = 1, 
+                                 validation_data = gen2,validation_steps=pasosxepocaV, callbacks=[callback1, callback2, callback3])
         
         hist_df = pd.DataFrame(history.history) 
         result.append(str(hist_df))
-        result.append("======================================")
-       
-        file = weightsDirectory+subject+'_KFold'+ '_d_' + droputStr + '_c_'+str(cropDistance)+'_exp_'+str(n)+'.json'
+        file = baseFileName+'.json'
         with open(file,mode='w') as f:
            hist_df.to_json(f)
         f.close() 
         n=n+1
     return result    
 
+
+
+def eegNestedKFold(trialList, labelList, inner_folds, outer_folds, subject,
+             cropDistance = 2, cropSize = 750, dropoutRate = 0.5, nb_classes = 2, channels=channels):
+    n=1
+    seed=5
+    droputStr = "%0.2f" % dropoutRate 
+    if subject[0]=='a':
+        len_trial=875
+    else:
+        len_trial=1000
+       
+    cv = StratifiedKFold(n_splits = 10, random_state=seed)
+    cv1= StratifiedKFold(n_splits = 9, random_state=seed)
+    pseudoTrialList = range(len(trialList))
+    pseudolabelList = np.array(labelList)
+    for train_indices, test_indices in cv.split(pseudoTrialList, pseudolabelList):
+       for train_indices1,val_indices in cv1.split(range(len(train_indices)), pseudolabelList[train_indices]):
+           
+            realTrain = []
+            for i in train_indices1:
+                realTrain.append(train_indices[i])
+            realVals = []
+            for j in val_indices:
+                realVals.append(train_indices[j])
+               
+           baseFileName= weightsDirectory+subject+ '_Nested_KFold_d_' + droputStr + '_c_'+str(cropDistance)+'_seed'+str(seed)+'_exp_'+str(n)
+           weightFileName=baseFileName +'_weights.hdf5'
+                    
+           classifier = model.createModel(Samples = cropSize, dropoutRate = dropoutRate,
+                                       nb_classes = nb_classes, Chans = channels)
+           callback1 = keras.callbacks.ModelCheckpoint(monitor='val_accuracy', filepath = weightFileName,
+                                                    save_best_only=True,
+                                                    save_weights_only=True)
+           callback2 = keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=12)    
+           callback3 = keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.33, patience=5, verbose=1, min_delta=1e-6) 
+           classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+           gen1 = Generator(trialList, labelList, nb_classes, realTrain, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
+
+           gen2 = Generator(trialList, labelList, nb_classes, realVals, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
+           gen3 = Generator(trialList, labelList, nb_classes, test_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
+
+           pasosxepocaT=int((len(realTrain)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
+           pasosxepocaV= int((len(realVals)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
+           pasosxepocaE= int((len(test_indices)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
+
+           history = classifier.fit(gen1, steps_per_epoch=pasosxepocaT, epochs = 100, verbose = 1, 
+                                        validation_data = gen2, validation_steps=pasosxepocaV, callbacks=[callback1, callback2, callback3])
+        
+           hist_df = pd.DataFrame(history.history) 
+                
+           #evaluate
+           classifier.load_weights(weightFileName)
+           classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+           result=classifier.evaluate_generator(gen3,pasosxepocaE)     
+           result_df=pd.DataFrame(result)
+                   
+           file = baseFileName+'.json'
+           with open(file,mode='w') as f:
+                 hist_df.to_json(f)
+                 result_df.to_json(f)
+                 f.close() 
+           n=n+1
+    return result 
+
 # This Function prepares the conditions to realize a cross validation (KFlod) for a specific subject
 # The function that realizes a KFold is eegKfold and it is calling here
-# If dataset 2a number of Folds= 9, if dataset 2b number of Folds=10
-  # left, right, foot and tongue are lists that contains the trials corresponding to each label
+# If dataset 2a or IVa number of Folds= 9, if dataset 2b number of Folds=10
   
 
+
 def trainKFold(subject, dropoutRate=0.5, optim='adam', cropDistance = 50, cropSize = 1000):
-    left, right, foot, tongue = eegUtils.load_eeg(dataDirectory + subject+'/Training/')
-    if (subject[0] == 'A'):
+        
+    if subject[0] == 'A':
+        strLabels=['Left','Right', 'Foot', 'Tongue']
+        nb_classes=4
+        channels=22
         folds = 9
-    else:
-        folds = 10        
-    return eegKFold(left, right, foot, tongue, folds, cropDistance = cropDistance, subject=subject,
-                    cropSize = cropSize, dropoutRate = dropoutRate)        
+    elif subject[0]=='B':
+        strLabels=['Left','Right']
+        nb_classes=2
+        channels=3
+        folds = 10
+    elif subject[0]=='a':
+        strLabels=['Right','Foot']
+        nb_classes=2
+        channels=118
+        folds = 9       
+    datalist, labelslist = eegUtils.load_eeg(dataDirectory + subject+'/Training/', strLabels)
+    return eegKFold(datalist, labelslist, folds,  subject=subject, cropDistance = cropDistance, 
+                    cropSize = cropSize, dropoutRate = dropoutRate, nb_classes=nb_classes, channels=channels)   
+   
+
+# This Function prepares the conditions to realize a Nested cross-validation (NestedKFlod) for a specific subject in dataset IVa
+# The function that realizes a NestedKFold is eegNestedKfold and it is calling here
+# In the outer loop, the number of folds are 10, and in the inner loop the number of folds are 9
+
+def trainNestedKFold(subject, dropoutRate=0.9, optim='adam', cropDistance = 50, cropSize = 1000):
+        
+    nb_classes=2
+    channels=118
+ 
+    datalist, labelslist = eegUtils.load_eeg(dataDirectory + subject+'/Training/', ['Right', 'Foot'])
+    datalist1, labelslist1=eegUtils.load_eeg(dataDirectory + subject+'/Evaluating/', ['Right', 'Foot'])
+    datalist=datalist + datalist1
+    labelslist=labelslist + labelslist1
+    outer_folds = 10
+    inner_folds = 9
+    return eegNestedKFold(datalist, labelslist, inner_folds, outer_folds, cropDistance = cropDistance, subject=subject,
+                    cropSize = cropSize, nb_classes=nb_classes, channels=channels, dropoutRate = dropoutRate)         
 
 
 #This function is to perform the experiment #4
 #exclude variable is a number that represents the subject whose data will not be used in the training process.
 
-def trainUnkownSubject(seed, dropoutRate=0.5, cropDistance = 50, cropSize = 1000,
-                      fraction = 5/6, channels = 22, nb_classes = 4,
-                      exclude = 1):
-    interSubjectTrain(seed=seed, dropoutRate=dropoutRate, cropDistance = cropDistance, 
-                      cropSize = cropSize,fraction = fraction, channels = channels,
-                      nb_classes = nb_classes, exclude = exclude)
+def trainUnkownSubject(dropoutRate=0.5, cropDistance = 50, cropSize = 1000,
+                      nb_classes = 4, exclude = 1):
+    interSubjectTrain(dropoutRate=dropoutRate, cropDistance = cropDistance, 
+                      cropSize = cropSize, nb_classes = nb_classes, exclude = exclude)
     
          

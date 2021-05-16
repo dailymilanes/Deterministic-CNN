@@ -7,6 +7,7 @@ Created on Fri Feb 12 17:03:49 2021
 import eegUtils
 import model
 import eegTrain
+import math
 
 # This function evaluate in a specific subject, subject is specified in subject.
 # It is necessary give the path of weights, in weightsFileName
@@ -19,22 +20,37 @@ import eegTrain
    # To load this file, if Experiment #3 or #4, subject = All
    # example: weightsDirectory+'B01_Seed_19_R_1_d_0.50_c_2_x_0_weights.hdf5'
    
-def eegEvaluate(subject, cropDistance, cropSize, weightsFileName, dropoutRate = 0.5,
-                channels = 22, nb_classes = 4):
+def eegEvaluate(subject, cropDistance, cropSize, weightsFileName, dropoutRate = 0.5):
+    
+    if subject[0] == 'A':
+       channels=22
+       nb_classes=4
+       strLabels=['Left','Right', 'Foot', 'Tongue']
+    elif subject[0] == 'B':
+       channels=3
+       nb_classes=2
+       strLabels=['Left','Right']
+    dropoutStr = "%0.2f" % dropoutRate 
+    seed=1
+    testDirectory = eegTrain.dataDirectory + subject + '/Evaluating/'   
+    
+    # If experiment #4 please add training data to testDirectory
+        
+    datalist, labelslist = eegUtils.load_eeg(testDirectory, strLabels)
+    test_indices = range(len(datalist))
    
-    testDirectory = eegTrain.dataDirectory + subject + '/Evaluating/'
-    leftList,rightList,footList,tongueList = eegUtils.load_eeg(testDirectory)    
-    indexs = range(len(leftList))
-    test_data, test_labels = eegUtils.makeNumpys(leftList, rightList, footList, 
-                        tongueList, cropDistance, cropSize, indexs)
-    classifier = model.createModel(Samples = cropSize, dropoutRate = dropoutRate, 
-                 Chans = channels, nb_classes = nb_classes)
-    
-    classifier.load_weights(weightsFileName)
-    classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', 
-                       metrics = ['accuracy'])
-    
-    result = classifier.evaluate(test_data, test_labels, verbose = 1)
-    return result
+    gen3 = eegUtils.Generator(datalist, labelslist, nb_classes, test_indices, channels, cropDistance, cropSize, int(math.ceil(125 / cropDistance)))
+    pasosxepocaE= int(math.ceil((len(test_indices)*int(math.ceil((1125-cropSize)/cropDistance)))/32))
 
+    for i in range(1,17):
+       classifier = model.createModel(Samples = 1000, dropoutRate = dropoutRate, 
+                  Chans = channels, nb_classes = nb_classes)
+       classifier.load_weights(weightsFileName)
+       classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+    
+       result = classifier.evaluate(gen3, steps=pasosxepocaE, verbose=1) 
+       
+       seed=seed+1
+       
+    return result 
 
