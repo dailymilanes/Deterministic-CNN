@@ -13,9 +13,9 @@ Created on Thu Feb 11 20:09:07 2021
 # To run any experiment, select appropietly subject, seed, dropoutRate, cropDistance=2
 # cropSize=1000 to datatsets 2a and 2b, cropSize=750 to datset IVa
 
-# nb_classes=4, channel=22, fraction=6 to dataset 2a
-# nb_classes=2, channel=3, fraction=5 to dataset 2b
-# nb_classes=2, channel=118 to dataset IVa
+# nb_classes=4, channels=22, fraction=6 to dataset 2a
+# nb_classes=2, channels=3, fraction=5 to dataset 2b
+# nb_classes=2, channels=118 to dataset IVa
 
 # Tu run experiment #4, please exclude parameter must be different of 0, and specify unknown subject
 
@@ -36,7 +36,7 @@ eegTrain.weightsDirectory = '../Weights/'
 
 #Nested KFold
 
-eegTrain.trainNestedKFold('aa', dropoutRate=0.9, optim='adam', cropDistance = 125, cropSize = 750)
+#eegTrain.trainNestedKFold('aa', dropoutRate=0.9, optim='adam', cropDistance = 125, cropSize = 750)
 
 # Experiment #2
 # eegTrain.intraSubjectTrain('B01', dropoutRate=0.5, cropDistance = 2, cropSize = 1000)
