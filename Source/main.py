@@ -15,7 +15,7 @@ Created on Thu Feb 11 20:09:07 2021
 
 # nb_classes=4, channel=22, fraction=6 to dataset 2a
 # nb_classes=2, channel=3, fraction=5 to dataset 2b
-# nb_classes=2, channel=118, fraction=5 to dataset IVa
+# nb_classes=2, channel=118 to dataset IVa
 
 # Tu run experiment #4, please exclude parameter must be different of 0, and specify unknown subject
 
