@@ -9,16 +9,16 @@ import model
 import eegTrain
 import math
 
-# This function evaluate in a specific subject, subject is specified in subject.
-# It is necessary give the path of weights, in weightsFileName
+# This function realizes a evaluation on testing set in a specific subject.
+# It is necessary give the path of weights, in weightsFileName variable
 # Return the evaluation results.
-# This function is used in all experiments, except KFold, in which the weights are not saved.
+# This function is used in all experiments, except KFold.
 # This function receives a parameter named weightsFileName,
    # this weightsFileName is a file, builted as: 
-   # subject + '_Seed_' +str(seed) +'_R_'+ str(repeat)+ '_d_' + droputStr + '_c_'+str(cropDistance)+ '_x_'+str(exclude)+'_weights.hdf5'    
+   # subject +'_d_' + droputStr + '_c_'+str(cropDistance)+  '_Seed' +str(seed) + '_exp_'+ str(repeat)+'_exclude_'+str(exclude)+'_weights.hdf5'    
    # and ubicated in weightsDirectory
    # To load this file, if Experiment #3 or #4, subject = All
-   # example: weightsDirectory+'B01_Seed_19_R_1_d_0.50_c_2_x_0_weights.hdf5'
+   # example: weightsDirectory+'A01_SE_d_0.80_c_2_seed9_exp_9_exclude_0_weights.hdf5'   in Experiment #2 on subject A01
    
 def eegEvaluate(subject, cropDistance, cropSize, weightsFileName, dropoutRate = 0.5):
     

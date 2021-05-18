@@ -14,7 +14,8 @@ import eegUtils
 import model
 import scipy.io as sio
 from sklearn.model_selection import StratifiedKFold, RepeatedStratifiedKFold
-
+import math
+import numpy as np
 
 # Global Variable that contains the path where the dataset is preprocessed
 dataDirectory = ''
@@ -30,14 +31,13 @@ weightsDirectory = ''
 # This is a funcion to realize the training for experiments #2,#3 and #4
 # subject: subject identifier (intra-subject training, Experiment #2), if "All" correspond to Experiment #3 or #4
 # seed:Seed to initialize the python random number generator to ensure repeatability of the experiment. 
-#      For experiments #2,#3 and #4 please, use the seed shows in main.py
-# Divide randomly each list left, right, foot, and tongue in two parts, one to train and other to validate the model
+# For experiments #2,#3 and #4 please, use the seed shows in main.py, and this experiments are used only on dataset 2 and 2b
+# Divide randomly each datalist, one to train and other to validate the model. This datalist correspond to training session 
 # The portion selected to train and to validate depends of the dataset
 # If dataset 2a fraction=5/6, if dataset 2b fraction=4/5 
-# left, right, foot and tongue: Lists of trial corresponding to left hand, right hand, feet and tongue
 #channels: Number of channels of EEG, for dataset 2a are 22,for dataset 2b are 3
 #nb_classes:Number of classes, for dataset 2a are 4, for dataset 2b are 2.
-#exclude: If experiment 4, exclude different of 0, for the other experiments exclude must be 0.
+#exclude: If experiment #4, exclude different of 0, for the other experiments exclude must be 0.
 
  
 def oneSubjectTrain(datalist,labelslist, subject, seed, repeat, 
@@ -82,8 +82,6 @@ def oneSubjectTrain(datalist,labelslist, subject, seed, repeat,
         f.close()
         break
     
-    
-    
 # This function prepares a intra subject training for Experiment #2. The number of repetitions is now 16, each one with a different seed
    
 def intraSubjectTrain(subject, dropoutRate=0.5, cropDistance = 50, cropSize = 1000):
@@ -101,7 +99,7 @@ def intraSubjectTrain(subject, dropoutRate=0.5, cropDistance = 50, cropSize = 10
        strLabels=['Left','Right']
       
     trainDirectory = dataDirectory + subject + '/Training/'
-    datalist, labelslist = load_eeg(trainDirectory,strLabels)
+    datalist, labelslist = eegUtils.load_eeg(trainDirectory,strLabels)
     
     seed=1 
     for j in range(1,17):
@@ -191,8 +189,8 @@ def eegKFold(trialList, labelList, folds, subject,
         callback2 = keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=12)    
         callback3 = keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.33, patience=5, verbose=1, min_delta=1e-6) 
         classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
-        gen2 = Generator(trialList, labelList, nb_classes, test_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize)/cropDistance)))
-        gen1 = Generator(trialList, labelList, nb_classes, train_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize)/cropDistance)))
+        gen2 = eegUtils.Generator(trialList, labelList, nb_classes, test_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize)/cropDistance)))
+        gen1 = eegUtils.Generator(trialList, labelList, nb_classes, train_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize)/cropDistance)))
         
         pasosxepocaT=int((len(train_indices)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
         pasosxepocaV= int((len(test_indices)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
@@ -210,17 +208,16 @@ def eegKFold(trialList, labelList, folds, subject,
     return result    
 
 
-
-def eegNestedKFold(trialList, labelList, inner_folds, outer_folds, subject,
-             cropDistance = 2, cropSize = 750, dropoutRate = 0.5, nb_classes = 2, channels=channels):
+# This function implemented a NestedKFold on dataset IVa over all dataset (280 trials)
+# A 10x9 Nested Kfold was used, 10 in outer loop and 9 in inner loop
+ 
+def eegNestedKFold(trialList, labelList, inner_folds, outer_folds, subject,cropDistance = 2, cropSize = 750, 
+                   dropoutRate = 0.5, nb_classes = 2, channels=118):
     n=1
     seed=5
     droputStr = "%0.2f" % dropoutRate 
-    if subject[0]=='a':
-        len_trial=875
-    else:
-        len_trial=1000
-       
+    len_trial=875
+          
     cv = StratifiedKFold(n_splits = 10, random_state=seed)
     cv1= StratifiedKFold(n_splits = 9, random_state=seed)
     pseudoTrialList = range(len(trialList))
@@ -228,11 +225,11 @@ def eegNestedKFold(trialList, labelList, inner_folds, outer_folds, subject,
     for train_indices, test_indices in cv.split(pseudoTrialList, pseudolabelList):
        for train_indices1,val_indices in cv1.split(range(len(train_indices)), pseudolabelList[train_indices]):
            
-            realTrain = []
-            for i in train_indices1:
+           realTrain = []
+           for i in train_indices1:
                 realTrain.append(train_indices[i])
-            realVals = []
-            for j in val_indices:
+           realVals = []
+           for j in val_indices:
                 realVals.append(train_indices[j])
                
            baseFileName= weightsDirectory+subject+ '_Nested_KFold_d_' + droputStr + '_c_'+str(cropDistance)+'_seed'+str(seed)+'_exp_'+str(n)
@@ -246,10 +243,10 @@ def eegNestedKFold(trialList, labelList, inner_folds, outer_folds, subject,
            callback2 = keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=12)    
            callback3 = keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.33, patience=5, verbose=1, min_delta=1e-6) 
            classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
-           gen1 = Generator(trialList, labelList, nb_classes, realTrain, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
+           gen1 = eegUtils.Generator(trialList, labelList, nb_classes, realTrain, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
 
-           gen2 = Generator(trialList, labelList, nb_classes, realVals, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
-           gen3 = Generator(trialList, labelList, nb_classes, test_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
+           gen2 = eegUtils.Generator(trialList, labelList, nb_classes, realVals, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
+           gen3 = eegUtils.Generator(trialList, labelList, nb_classes, test_indices, channels, cropDistance, cropSize, int(math.ceil((len_trial-cropSize) / cropDistance)))
 
            pasosxepocaT=int((len(realTrain)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
            pasosxepocaV= int((len(realVals)*int(math.ceil((len_trial-cropSize)/cropDistance)))/32)
@@ -318,7 +315,7 @@ def trainNestedKFold(subject, dropoutRate=0.9, optim='adam', cropDistance = 50, 
     outer_folds = 10
     inner_folds = 9
     return eegNestedKFold(datalist, labelslist, inner_folds, outer_folds, cropDistance = cropDistance, subject=subject,
-                    cropSize = cropSize, nb_classes=nb_classes, channels=channels, dropoutRate = dropoutRate)         
+                          cropSize = cropSize, nb_classes=nb_classes, channels=channels, dropoutRate = dropoutRate)         
 
 
 #This function is to perform the experiment #4
