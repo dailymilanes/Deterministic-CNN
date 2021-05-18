@@ -5,5 +5,5 @@ Data contains the preprocessed databases in format .mat
 Preprocessing:
 Band-pass filter from 4-38 Hz.
 Exponential moving standardization with a decay factor of 0.999, to compute μ(ti) mean and variance σ^2(ti) in each trial.
-The data x was standardized by (x-μ(ti))/σ(ti)
+The data x was standardized by (x(ti)-μ(ti))/σ(ti)
 Rectify outliers, limited to μ(ti) ± 6σ(ti)
