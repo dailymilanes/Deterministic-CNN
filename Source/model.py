@@ -32,6 +32,6 @@ def createModel(nb_classes = 4, Chans = 22, Samples = 1000, dropoutRate = 0.5, i
     block  = keras.layers.Activation(log)(block) 
     flatten = Flatten()(block) 
     block  = Dropout(dropoutRate)(flatten)
-    dense   = Dense(nb_classes, kernel_constraint = max_norm(0.5),name='Dense')(flatten) 
+    dense   = Dense(nb_classes, kernel_constraint = max_norm(0.5),name='Dense')(block) 
     softmax = keras.layers.Activation('softmax')(dense)      
     return Model(inputs=input_main, outputs=softmax) 
